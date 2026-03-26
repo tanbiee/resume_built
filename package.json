@@ -1,0 +1,17 @@
+{
+  "name": "resume-optimizer-bot",
+  "version": "1.0.0",
+  "description": "ATS Resume Optimization Bot - MERN Stack",
+  "main": "index.js",
+  "scripts": {
+    "server": "cd backend && npx nodemon server.js",
+    "client": "cd frontend && npm run dev",
+    "dev": "concurrently --kill-others-on-fail \"npm run server\" \"npm run client\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
