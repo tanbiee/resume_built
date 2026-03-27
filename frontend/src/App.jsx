@@ -89,9 +89,35 @@ export default function App() {
           ResumeIQ
           <span className="logo-bracket">]</span>
         </div>
-        <div className="nav-status">
-          <div className="dot" />
-          SYSTEM_ONLINE
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+          <a
+            href="https://t.me/Make_your_resume_bot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-telegram"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px', 
+              textDecoration: 'none', color: '#fff', 
+              background: 'rgba(0, 136, 204, 0.2)', 
+              border: '1px solid #0088cc',
+              padding: '6px 12px', borderRadius: '4px', 
+              fontSize: '0.8rem', fontWeight: 'bold', 
+              transition: 'all 0.2s ease',
+              textTransform: 'uppercase'
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(0, 136, 204, 0.4)'; e.currentTarget.style.boxShadow = '0 0 10px rgba(0, 136, 204, 0.5)'; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(0, 136, 204, 0.2)'; e.currentTarget.style.boxShadow = 'none'; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.5 2L2 11.5l6.5 2.5L21.5 2z" />
+              <path d="M21.5 2L15 22l-6.5-6L21.5 2z" />
+            </svg>
+            use TG Bot
+          </a>
+          <div className="nav-status">
+            <div className="dot" />
+            SYSTEM_ONLINE
+          </div>
         </div>
       </nav>
 
