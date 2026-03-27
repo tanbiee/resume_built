@@ -2,194 +2,278 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-// Color palette
-const C = {
-  black:    '#1a1a2e',
-  accent:   '#4f46e5',
-  accent2:  '#06b6d4',
-  white:    '#ffffff',
-  gray:     '#6b7280',
-  lightgray:'#f3f4f6',
-  border:   '#e5e7eb',
-  text:     '#374151',
+// ── Constants ──────────────────────────────────────────────────────────────────
+const PAGE_W    = 595.28;   // A4 width  (pts)
+const PAGE_H    = 841.89;   // A4 height (pts)
+const ML        = 48;       // left margin
+const MR        = 48;       // right margin
+const MT        = 48;       // top margin
+const MB        = 48;       // bottom margin
+const CW        = PAGE_W - ML - MR;  // content width
+const BOTTOM    = PAGE_H - MB;       // y at which we must add a new page
+
+// ── Colours ────────────────────────────────────────────────────────────────────
+const COL = {
+  name:     '#0f172a',
+  accent:   '#4338ca',
+  section:  '#4338ca',
+  title:    '#1e293b',
+  sub:      '#475569',
+  body:     '#334155',
+  rule:     '#cbd5e1',
+  header_rule: '#4338ca',
 };
 
-const FONTS = {
-  regular: 'Helvetica',
+// ── Font helpers ───────────────────────────────────────────────────────────────
+const F = {
   bold:    'Helvetica-Bold',
-  oblique: 'Helvetica-Oblique',
+  regular: 'Helvetica',
+  italic:  'Helvetica-Oblique',
 };
-
-const MARGIN = 45;
-const PAGE_W = 595.28; // A4
-const CONTENT_W = PAGE_W - MARGIN * 2;
 
 /**
- * Generate a formatted PDF from structured CV data
- * @param {object} cv - Structured CV object from Groq
- * @param {string} outputPath - File path to save PDF
+ * Build a flat text line that honours the `continued` flag.
+ * Returns the new y position after printing.
  */
-const generateCVPdf = (cv, outputPath) => {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: MARGIN, info: { Title: `${cv.contact?.name || 'Resume'} - CV` } });
-    const stream = fs.createWriteStream(outputPath);
-    doc.pipe(stream);
-
-    let y = MARGIN;
-
-    // ── HEADER ────────────────────────────────────────────────────────────────
-    // Name
-    doc.font(FONTS.bold).fontSize(24).fillColor(C.black)
-       .text(cv.contact?.name || 'Candidate', MARGIN, y, { width: CONTENT_W });
-    y = doc.y + 4;
-
-    // Contact line
-    const contactParts = [
-      cv.contact?.email,
-      cv.contact?.phone,
-      cv.contact?.linkedin,
-      cv.contact?.github,
-      cv.contact?.location,
-    ].filter(Boolean);
-
-    doc.font(FONTS.regular).fontSize(8.5).fillColor(C.gray)
-       .text(contactParts.join('  •  '), MARGIN, y, { width: CONTENT_W });
-    y = doc.y + 4;
-
-    // Rule under header
-    doc.moveTo(MARGIN, y).lineTo(PAGE_W - MARGIN, y)
-       .lineWidth(2).strokeColor(C.accent).stroke();
-    y += 10;
-
-    // ── SUMMARY ───────────────────────────────────────────────────────────────
-    if (cv.summary) {
-      y = sectionTitle(doc, 'SUMMARY', y);
-      doc.font(FONTS.regular).fontSize(9.5).fillColor(C.text)
-         .text(cv.summary, MARGIN, y, { width: CONTENT_W, align: 'justify' });
-      y = doc.y + 10;
-    }
-
-    // ── SKILLS ────────────────────────────────────────────────────────────────
-    if (cv.skills) {
-      y = sectionTitle(doc, 'SKILLS', y);
-      const skillRows = [
-        ['Languages',  cv.skills.languages],
-        ['Frameworks', cv.skills.frameworks],
-        ['Tools',      cv.skills.tools],
-        ['Soft Skills',cv.skills.soft_skills],
-      ].filter(([, v]) => v);
-
-      for (const [label, value] of skillRows) {
-        doc.font(FONTS.bold).fontSize(9).fillColor(C.black).text(`${label}: `, MARGIN, y, { continued: true, width: CONTENT_W });
-        doc.font(FONTS.regular).fontSize(9).fillColor(C.text).text(value, { width: CONTENT_W });
-        y = doc.y + 3;
-      }
-      y += 6;
-    }
-
-    // ── EXPERIENCE ────────────────────────────────────────────────────────────
-    if (cv.experience?.length) {
-      y = sectionTitle(doc, 'EXPERIENCE', y);
-      for (const exp of cv.experience) {
-        y = entryHeader(doc, exp.title, exp.company, exp.duration, y);
-        for (const b of (exp.bullets || [])) {
-          y = bullet(doc, b, y);
-        }
-        y += 6;
-      }
-    }
-
-    // ── PROJECTS ──────────────────────────────────────────────────────────────
-    if (cv.projects?.length) {
-      y = sectionTitle(doc, 'PROJECTS', y);
-      for (const proj of cv.projects) {
-        const headerLabel = proj.tech ? `${proj.name} | ${proj.tech}` : proj.name;
-        y = entryHeader(doc, headerLabel, '', proj.duration, y);
-        for (const b of (proj.bullets || [])) {
-          y = bullet(doc, b, y);
-        }
-        y += 6;
-      }
-    }
-
-    // ── EDUCATION ─────────────────────────────────────────────────────────────
-    if (cv.education?.length) {
-      y = sectionTitle(doc, 'EDUCATION', y);
-      for (const edu of cv.education) {
-        const detail = edu.gpa ? `${edu.institution}  •  GPA: ${edu.gpa}` : edu.institution;
-        y = entryHeader(doc, edu.degree, detail, edu.duration, y);
-        y += 4;
-      }
-    }
-
-    // ── CERTIFICATIONS ────────────────────────────────────────────────────────
-    if (cv.certifications?.length) {
-      y = sectionTitle(doc, 'CERTIFICATIONS', y);
-      for (const cert of cv.certifications) {
-        y = bullet(doc, cert, y);
-      }
-      y += 6;
-    }
-
-    // ── ACHIEVEMENTS ──────────────────────────────────────────────────────────
-    if (cv.achievements?.length) {
-      y = sectionTitle(doc, 'ACHIEVEMENTS', y);
-      for (const ach of cv.achievements) {
-        y = bullet(doc, ach, y);
-      }
-    }
-
-    doc.end();
-    stream.on('finish', resolve);
-    stream.on('error', reject);
-  });
-};
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function sectionTitle(doc, label, y) {
-  if (y > 720) { doc.addPage(); y = MARGIN; }
-  doc.font(FONTS.bold).fontSize(10).fillColor(C.accent)
-     .text(label, MARGIN, y, { width: CONTENT_W });
-  const lineY = doc.y + 2;
-  doc.moveTo(MARGIN, lineY).lineTo(PAGE_W - MARGIN, lineY)
-     .lineWidth(0.5).strokeColor(C.border).stroke();
-  return lineY + 6;
+function safePrint(doc, text, x, y, opts = {}) {
+  if (y > BOTTOM - 20) { doc.addPage(); y = MT; }
+  doc.text(text, x, y, opts);
+  return doc.y;
 }
 
-function entryHeader(doc, title, subtitle, duration, y) {
-  if (y > 710) { doc.addPage(); y = MARGIN; }
-  // Title (left) + Duration (right) on same line
-  const durationW = duration ? doc.font(FONTS.regular).fontSize(9).widthOfString(duration) + 4 : 0;
-  const titleW = CONTENT_W - durationW;
+/**
+ * Draw a thin horizontal rule.
+ */
+function rule(doc, y, color = COL.rule, width = 0.4) {
+  if (y > BOTTOM - 10) { doc.addPage(); y = MT; }
+  doc.moveTo(ML, y)
+     .lineTo(PAGE_W - MR, y)
+     .lineWidth(width)
+     .strokeColor(color)
+     .stroke();
+  return y + 5;
+}
 
-  doc.font(FONTS.bold).fontSize(10).fillColor(C.black)
-     .text(title, MARGIN, y, { width: titleW, continued: duration ? false : false });
-
-  if (duration) {
-    doc.font(FONTS.regular).fontSize(8.5).fillColor(C.gray)
-       .text(duration, PAGE_W - MARGIN - durationW, y, { width: durationW, align: 'right' });
-  }
-
-  y = doc.y;
-
-  if (subtitle) {
-    doc.font(FONTS.oblique).fontSize(9).fillColor(C.gray)
-       .text(subtitle, MARGIN, y, { width: CONTENT_W });
-    y = doc.y;
-  }
+/**
+ * Section heading (e.g. SKILLS, EXPERIENCE).
+ * Returns new y after the rule.
+ */
+function sectionHead(doc, label, y) {
+  if (y > BOTTOM - 30) { doc.addPage(); y = MT; }
+  y += 6; // breathing room above section
+  doc.font(F.bold).fontSize(9).fillColor(COL.section)
+     .text(label.toUpperCase(), ML, y, { width: CW, characterSpacing: 1 });
+  y = doc.y + 2;
+  y = rule(doc, y, COL.rule, 0.5);
   return y + 2;
 }
 
+/**
+ * Entry header for experience / projects / education.
+ *   Line 1  →  [bold title]          [right-aligned date]
+ *   Line 2  →  [italic subtitle]     (optional)
+ *
+ * We measure the title width. If title + date fit on one line → same line.
+ * If not → title wraps freely, date goes on the subtitle line.
+ */
+function entryHeader(doc, { title, subtitle, date, titleSize = 10 }, y) {
+  if (y > BOTTOM - 40) { doc.addPage(); y = MT; }
+
+  const dateStr   = date || '';
+  const dateW     = dateStr
+    ? doc.font(F.regular).fontSize(8.5).widthOfString(dateStr) + 4
+    : 0;
+  const titleAvail = CW - dateW - (dateW ? 8 : 0);
+
+  // Title (left) — allow wrap within available width
+  doc.font(F.bold).fontSize(titleSize).fillColor(COL.title);
+  const titleLineH = doc.currentLineHeight(true);
+  const titleLines = Math.ceil(doc.font(F.bold).fontSize(titleSize).widthOfString(title) / titleAvail);
+
+  doc.text(title, ML, y, { width: titleAvail, lineBreak: true });
+  const afterTitle = doc.y;
+
+  // Date — always right-aligned, pinned to the first line of the title
+  if (dateStr) {
+    doc.font(F.regular).fontSize(8.5).fillColor(COL.sub)
+       .text(dateStr, ML, y, { width: CW, align: 'right' });
+  }
+
+  y = afterTitle;
+
+  // Subtitle (italic, e.g. company name or tech stack)
+  if (subtitle) {
+    if (y > BOTTOM - 20) { doc.addPage(); y = MT; }
+    doc.font(F.italic).fontSize(8.5).fillColor(COL.sub)
+       .text(subtitle, ML, y, { width: CW, lineBreak: true });
+    y = doc.y;
+  }
+
+  return y + 3;
+}
+
+/**
+ * Bullet point — handles wrapping gracefully.
+ */
 function bullet(doc, text, y) {
-  if (y > 720) { doc.addPage(); y = MARGIN; }
-  const bulletX = MARGIN + 10;
-  const textX = MARGIN + 18;
-  doc.font(FONTS.regular).fontSize(9).fillColor(C.text)
-     .text('•', MARGIN, y, { width: 10, continued: false });
-  doc.font(FONTS.regular).fontSize(9).fillColor(C.text)
-     .text(text, textX, y, { width: CONTENT_W - 18 });
+  if (y > BOTTOM - 18) { doc.addPage(); y = MT; }
+  const indent = 14;
+  doc.font(F.regular).fontSize(9).fillColor(COL.body)
+     .text('•', ML, y, { width: indent, lineBreak: false });
+  doc.font(F.regular).fontSize(9).fillColor(COL.body)
+     .text(text.trim(), ML + indent, y, { width: CW - indent, lineBreak: true, align: 'justify' });
   return doc.y + 2;
 }
+
+/**
+ * Main entry point: generates a formatted A4 PDF from a structured CV object.
+ */
+const generateCVPdf = (cv, outputPath) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size:    'A4',
+        margins: { top: MT, bottom: MB, left: ML, right: MR },
+        info:    { Title: `${cv.contact?.name || 'Resume'}`, Author: cv.contact?.name || '' },
+      });
+
+      const stream = fs.createWriteStream(outputPath);
+      doc.pipe(stream);
+
+      let y = MT;
+
+      // ── HEADER ──────────────────────────────────────────────────────────────
+      doc.font(F.bold).fontSize(26).fillColor(COL.name)
+         .text(cv.contact?.name || 'Candidate', ML, y, { width: CW });
+      y = doc.y + 4;
+
+      // Contact row
+      const contactParts = [
+        cv.contact?.email,
+        cv.contact?.phone,
+        cv.contact?.linkedin,
+        cv.contact?.github,
+        cv.contact?.location,
+      ].filter(Boolean);
+
+      if (contactParts.length) {
+        doc.font(F.regular).fontSize(8.5).fillColor(COL.sub)
+           .text(contactParts.join('   •   '), ML, y, { width: CW });
+        y = doc.y + 5;
+      }
+
+      // Bold accent rule under name
+      doc.moveTo(ML, y)
+         .lineTo(PAGE_W - MR, y)
+         .lineWidth(2)
+         .strokeColor(COL.header_rule)
+         .stroke();
+      y += 10;
+
+      // ── SUMMARY ─────────────────────────────────────────────────────────────
+      if (cv.summary?.trim()) {
+        y = sectionHead(doc, 'Summary', y);
+        doc.font(F.regular).fontSize(9.5).fillColor(COL.body)
+           .text(cv.summary.trim(), ML, y, { width: CW, align: 'justify', lineBreak: true });
+        y = doc.y + 8;
+      }
+
+      // ── SKILLS ──────────────────────────────────────────────────────────────
+      const skillRows = cv.skills
+        ? [
+            ['Languages',   cv.skills.languages],
+            ['Frameworks',  cv.skills.frameworks],
+            ['Tools',       cv.skills.tools],
+            ['Soft Skills', cv.skills.soft_skills],
+          ].filter(([, v]) => v && v.trim())
+        : [];
+
+      if (skillRows.length) {
+        y = sectionHead(doc, 'Skills', y);
+        for (const [label, value] of skillRows) {
+          if (y > BOTTOM - 16) { doc.addPage(); y = MT; }
+          doc.font(F.bold).fontSize(9).fillColor(COL.title)
+             .text(`${label}: `, ML, y, { continued: true, width: CW });
+          doc.font(F.regular).fontSize(9).fillColor(COL.body)
+             .text(value.trim(), { width: CW });
+          y = doc.y + 2;
+        }
+        y += 6;
+      }
+
+      // ── EXPERIENCE ──────────────────────────────────────────────────────────
+      if (cv.experience?.length) {
+        y = sectionHead(doc, 'Experience', y);
+        for (const exp of cv.experience) {
+          y = entryHeader(doc, {
+            title:    exp.title,
+            subtitle: exp.company,
+            date:     exp.duration,
+          }, y);
+          for (const b of (exp.bullets || [])) {
+            if (b?.trim()) y = bullet(doc, b, y);
+          }
+          y += 5;
+        }
+      }
+
+      // ── PROJECTS ────────────────────────────────────────────────────────────
+      if (cv.projects?.length) {
+        y = sectionHead(doc, 'Projects', y);
+        for (const proj of cv.projects) {
+          // Project name as title, tech stack as subtitle (separate line — no collision!)
+          y = entryHeader(doc, {
+            title:    proj.name,
+            subtitle: proj.tech ? `Tech: ${proj.tech}` : '',
+            date:     proj.duration,
+            titleSize: 9.5,
+          }, y);
+          for (const b of (proj.bullets || [])) {
+            if (b?.trim()) y = bullet(doc, b, y);
+          }
+          y += 5;
+        }
+      }
+
+      // ── EDUCATION ───────────────────────────────────────────────────────────
+      if (cv.education?.length) {
+        y = sectionHead(doc, 'Education', y);
+        for (const edu of cv.education) {
+          const sub = [edu.institution, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).join('   •   ');
+          y = entryHeader(doc, {
+            title:    edu.degree,
+            subtitle: sub,
+            date:     edu.duration,
+          }, y);
+          y += 3;
+        }
+      }
+
+      // ── CERTIFICATIONS ──────────────────────────────────────────────────────
+      if (cv.certifications?.filter(c => c?.trim()).length) {
+        y = sectionHead(doc, 'Certifications', y);
+        for (const cert of cv.certifications) {
+          if (cert?.trim()) y = bullet(doc, cert, y);
+        }
+        y += 5;
+      }
+
+      // ── ACHIEVEMENTS ────────────────────────────────────────────────────────
+      if (cv.achievements?.filter(a => a?.trim()).length) {
+        y = sectionHead(doc, 'Achievements', y);
+        for (const ach of cv.achievements) {
+          if (ach?.trim()) y = bullet(doc, ach, y);
+        }
+      }
+
+      doc.end();
+      stream.on('finish', resolve);
+      stream.on('error',  reject);
+
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
 
 module.exports = { generateCVPdf };

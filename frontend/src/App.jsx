@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import './index.css'
 
-const API_URL = 'http://localhost:5000/api/resume/optimize'
+const API_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/resume/optimize` : 'http://localhost:5000/api/resume/optimize'
 
 const getClass = (score) => score >= 75 ? 'high' : score >= 50 ? 'med' : 'low'
 const getVerdict = (score) => score >= 75 ? 'STRONG MATCH' : score >= 50 ? 'PARTIAL MATCH' : 'WEAK MATCH'
@@ -50,11 +50,28 @@ export default function App() {
     finally { setLoading(false) }
   }
 
-  const download = (link) => {
-    const a = document.createElement('a')
-    a.href = `http://localhost:5000${link.url}`
-    a.download = `${link.style_name.replace(/\s+/g, '_')}_CV.pdf`
-    a.click()
+  const [downloading, setDownloading] = useState(null)
+
+  const download = async (link) => {
+    setDownloading(link.filename)
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+      const res = await fetch(`${baseUrl}${link.url}`)
+      if (!res.ok) throw new Error('File not found on server.')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${link.style_name.replace(/\s+/g, '_')}_CV.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert(`Download failed: ${e.message}`)
+    } finally {
+      setDownloading(null)
+    }
   }
 
   const step = results ? 3 : loading ? 2 : 1
@@ -290,8 +307,12 @@ export default function App() {
                               <div className="variant-icon">{VARIANT_META[i]?.icon || '📄'}</div>
                               <h4>{link.style_name}</h4>
                               <p>{VARIANT_META[i]?.desc || 'Optimized CV variant.'}</p>
-                              <button className="btn-dl" onClick={() => download(link)}>
-                                ↓ download PDF
+                              <button
+                                className="btn-dl"
+                                onClick={() => download(link)}
+                                disabled={!!downloading}
+                              >
+                                {downloading === link.filename ? '⏳ downloading...' : '↓ download PDF'}
                               </button>
                             </div>
                           ))}
