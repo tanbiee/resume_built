@@ -56,17 +56,17 @@ export default function App() {
     setDownloading(link.filename)
     try {
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-      const res = await fetch(`${baseUrl}${link.url}`)
-      if (!res.ok) throw new Error('File not found on server.')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
+      const fileUrl = `${baseUrl}${link.url}`
+      
       const a = document.createElement('a')
-      a.href = url
-      a.download = `${link.style_name.replace(/\s+/g, '_')}_CV.pdf`
+      a.href = fileUrl
+      a.setAttribute('download', '') // Let the backend filename rule, or browser native
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      
+      // Artificial delay to clear loading state as native download is instant
+      await new Promise(r => setTimeout(r, 1000))
     } catch (e) {
       alert(`Download failed: ${e.message}`)
     } finally {
