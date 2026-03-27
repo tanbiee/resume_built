@@ -18,10 +18,9 @@ if (!TOKEN) {
 const bot = new TelegramBot(TOKEN, { polling: true });
 
 // Suppress non-fatal 409 Conflict errors (caused by running multiple instances)
-bot.on('polling_error', async (err) => {
+bot.on('polling_error', (err) => {
   if (err.code === 'ETELEGRAM' && err.message.includes('409')) {
-    console.warn('⚠️  Telegram 409: Another bot instance is already running. Stopping duplicate polling.');
-    try { await bot.stopPolling(); } catch (e) {}
+    console.warn('⚠️  Telegram 409: Another bot instance is already running. Stop duplicate npm run dev processes.');
   } else {
     console.error('[BOT POLLING ERROR]', err.message);
   }
